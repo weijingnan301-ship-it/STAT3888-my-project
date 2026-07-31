@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>方法对比表</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Roboto, sans-serif;
+            max-width: 1100px;
+            margin: 40px auto;
+            padding: 0 20px;
+            background: #f8fafc;
+            color: #0f172a;
+        }
+        h1 {
+            text-align: center;
+            font-size: 28px;
+            font-weight: 600;
+            border-bottom: 3px solid #2563eb;
+            padding-bottom: 12px;
+            margin-bottom: 30px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            background: white;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+        }
+        th {
+            background: #1e293b;
+            color: white;
+            font-weight: 600;
+            padding: 14px 12px;
+            text-align: left;
+            font-size: 14px;
+        }
+        td {
+            padding: 12px 14px;
+            border-bottom: 1px solid #e2e8f0;
+            font-size: 14px;
+            line-height: 1.5;
+            vertical-align: top;
+        }
+        tr:last-child td {
+            border-bottom: none;
+        }
+        tr:hover {
+            background: #f1f5f9;
+        }
+        .highlight {
+            background: #dbeafe;
+            font-weight: 600;
+        }
+        .badge {
+            display: inline-block;
+            background: #2563eb;
+            color: white;
+            font-size: 12px;
+            padding: 2px 10px;
+            border-radius: 20px;
+            font-weight: 600;
+        }
+        .check { color: #16a34a; font-weight: 700; }
+        .cross { color: #dc2626; font-weight: 700; }
+        .conclusion {
+            background: #f0fdf4;
+            border-left: 4px solid #22c55e;
+            padding: 18px 24px;
+            border-radius: 8px;
+            margin-top: 30px;
+            font-size: 15px;
+            line-height: 1.7;
+        }
+        .footer {
+            text-align: center;
+            margin-top: 30px;
+            font-size: 13px;
+            color: #64748b;
+        }
+    </style>
+</head>
+<body>
+
+<h1>📊 Full Method Comparison: IDW vs. Ordinary Kriging</h1>
+
+<table>
+    <thead>
+        <tr>
+            <th style="width:18%;">Aspect</th>
+            <th style="width:27%;">IDW</th>
+            <th style="width:30%;">Ordinary Kriging</th>
+            <th style="width:25%;">✅ Why IDW is Selected</th>
+        </tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td><strong>Core Idea</strong></td>
+            <td>Closer points receive larger weights</td>
+            <td>Models spatial structure, then optimal prediction</td>
+            <td>Intuitive and easy to explain in 4‑slide PPT</td>
+        </tr>
+        <tr>
+            <td><strong>Semivariogram Required</strong></td>
+            <td><span class="cross">✗</span> No</td>
+            <td><span class="check">✓</span> Yes, needs fitting</td>
+            <td>Reduces extra assumptions</td>
+        </tr>
+        <tr>
+            <td><strong>Parameters</strong></td>
+            <td>Power parameter θ</td>
+            <td>Nugget, sill, range, variogram model</td>
+            <td>Only one main parameter, easy to tune via LOOCV</td>
+        </tr>
+        <tr>
+            <td><strong>Interpretability</strong></td>
+            <td>High: larger θ = stronger nearby influence</td>
+            <td>Medium‑high: professional but heavier</td>
+            <td>Reviewers quickly grasp "nearby neighborhoods are more similar"</td>
+        </tr>
+        <tr>
+            <td><strong>Implementation Complexity</strong></td>
+            <td><span class="badge">Low</span></td>
+            <td><span class="badge" style="background:#f59e0b;">Medium‑High</span></td>
+            <td>More stable, less affected by unstable variogram fitting</td>
+        </tr>
+        <tr>
+            <td><strong>Data Requirement</strong></td>
+            <td>Low; works with limited samples</td>
+            <td>High; needs clear spatial structure</td>
+            <td>Only 140 centroid points → IDW is better suited</td>
+        </tr>
+        <tr>
+            <td><strong>Prediction Output</strong></td>
+            <td>Smoothed risk surface</td>
+            <td>Smoothed risk surface + prediction variance</td>
+            <td>IDW performs better in LOOCV</td>
+        </tr>
+        <tr>
+            <td><strong>Uncertainty Representation</strong></td>
+            <td>Not directly; LOOCV error approximates</td>
+            <td><span class="check">✓</span> Direct Kriging variance output</td>
+            <td>Kriging serves as supplementary benchmark</td>
+        </tr>
+        <tr>
+            <td><strong>Computational Efficiency</strong></td>
+            <td><span class="badge">Fast</span></td>
+            <td>Slow</td>
+            <td>Suitable for rapid tuning and cross‑validation</td>
+        </tr>
+        <tr>
+            <td><strong>Outlier Sensitivity</strong></td>
+            <td>Sensitive, especially with large θ</td>
+            <td>Also sensitive, but nugget can mitigate</td>
+            <td>LOOCV‑based θ selection controls over‑reliance on nearest neighbors</td>
+        </tr>
+        <tr>
+            <td><strong>Suitable Scenarios</strong></td>
+            <td>Quick interpolation, risk mapping, interpretable prediction</td>
+            <td>Rigorous geostatistical modeling, uncertainty estimation</td>
+            <td>Goal: interpretable, presentable, verifiable risk map</td>
+        </tr>
+        <tr class="highlight">
+            <td><strong>Presentation Impact</strong></td>
+            <td>Simple and direct</td>
+            <td>More advanced and statistical</td>
+            <td><strong>IDW as primary, Kriging as advanced benchmark — balanced</strong></td>
+        </tr>
+    </tbody>
+</table>
+
+<div class="conclusion">
+    <strong>✅ Conclusion:</strong> After all models were trained on the same target (<code>log(theft_count + 1)</code>),
+    <strong>IDW (θ=3) achieved the lowest LOOCV RMSE (0.6898)</strong> among all compared models.<br>
+    With fewer assumptions, transparent parameter tuning, and suitability for small‑sample data (140 centroids),
+    <strong>IDW is selected as the primary model</strong>; Kriging serves as an advanced benchmark that provides complementary uncertainty estimates.
+</div>
+
+<div class="footer">
+    📌 All models predict the same target: log(theft_count + 1) &nbsp;·&nbsp; 📊 See <a href="model_comparison.html">Interactive LOOCV Comparison</a>
+</div>
+
+</body>
+</html>
