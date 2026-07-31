@@ -24,4 +24,4 @@
 
 ## 📁 Project Files
 
-- [Full Comparison Table (Styled)](https://weijingnan301-ship-it.github.io/STAT3888-my-project/comparison.html)
+- [Full Comparison Table (Styled)]((https://weijingnan301.github.io/ship-it/comparison.html))
