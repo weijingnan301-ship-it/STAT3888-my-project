@@ -20,3 +20,8 @@
 | Presentation Impact | Simple and direct | More advanced and statistical | IDW as the primary model, Kriging as a high‑level benchmark — balanced overall |
 
 **Conclusion:** After all models were trained on the same target (`log(theft_count + 1)`), **IDW (θ=3) achieved the lowest LOOCV RMSE of 0.6898** among all compared models. With fewer assumptions, transparent parameter tuning, and suitability for small‑sample data, IDW is selected as the primary model; Kriging serves as an advanced benchmark that provides complementary uncertainty estimates.
+
+
+## 📁 Project Files
+
+- [Full Comparison Table (Styled)](https://weijingnan301-ship-it.github.github.io/STAT3888-my-project/comparison.html)
