@@ -1,0 +1,1379 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook. When you execute code within the notebook, the results appear beneath the code. 
+
+Try executing this chunk by clicking the *Run* button within the chunk or by placing your cursor inside it and pressing *Cmd+Shift+Enter*. 
+
+```{r}
+install.packages("svglite")
+library(tidyverse)
+library(fields)
+library(lubridate)
+library(ggmap)
+library(export)
+```
+
+Add a new chunk by clicking the *Insert Chunk* button on the toolbar or by pressing *Cmd+Option+I*.
+
+When you save the notebook, an HTML file containing the code and output will be saved alongside it (click the *Preview* button or press *Cmd+Shift+K* to preview the HTML file). 
+
+The preview shows you a rendered HTML copy of the contents of the editor. Consequently, unlike *Knit*, *Preview* does not run any R code chunks. Instead, the output of the chunk when it was last run in the editor is displayed.
+
+```{r}
+library(readr)
+library(dplyr)
+library(sf)
+library(spdep)
+
+# 1. 读取数据
+head(bicycle)
+# 2. 按社区聚合案件数
+bike_neigh <- bicycle %>%
+  filter(!is.na(long), !is.na(lat), !is.na(neighborhood)) %>%
+  group_by(neighborhood, long, lat) %>%
+  summarise(
+    incidents = n(),
+    avg_cost = mean(bike_cost, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+# 3. 转为空间对象，并投影到 UTM，距离单位变成米
+bike_sf <- st_as_sf(
+  bike_neigh,
+  coords = c("long", "lat"),
+  crs = 4326,
+  remove = FALSE
+) %>%
+  st_transform(32617)   # Toronto 所在 UTM zone，单位为米
+
+coords <- st_coordinates(bike_sf)
+
+# 4. 构建空间邻居关系：5.6 km 内视为邻居
+nb <- dnearneigh(
+  coords,
+  d1 = 0,
+  d2 = 5600
+)
+
+# 5. 构建空间权重矩阵
+lw <- nb2listw(
+  nb,
+  style = "W",
+  zero.policy = TRUE
+)
+
+# 6. 全局 Moran's I 检验
+moran_result <- moran.test(
+  bike_neigh$incidents,
+  lw,
+  zero.policy = TRUE
+)
+
+print(moran_result)
+
+# 7. 提取 Moran's I 和 p-value
+moran_i <- moran_result$estimate["Moran I statistic"]
+p_value <- moran_result$p.value
+
+cat("Moran's I =", round(moran_i, 3), "\n")
+cat("p-value =", p_value, "\n")
+```
+
+```{r}
+# 加载包
+library(tidyverse)
+library(ggmap)
+library(viridis)
+
+# 注册 Stadia Maps API key（执行一次即可）
+# 不建议把 API key 明文写进作业代码；请先在系统环境变量里设置 STADIA_MAPS_KEY。
+if (Sys.getenv("STADIA_MAPS_KEY") != "") {
+  register_stadiamaps(key = Sys.getenv("STADIA_MAPS_KEY"))
+}
+
+# 2. 清洗数据
+bike_clean <- bicycle %>%
+  filter(!is.na(long), !is.na(lat), !is.na(neighborhood))
+
+# 3. 设置地图范围
+toronto_bbox <- c(
+  left   = min(bike_clean$long) - 0.02,
+  bottom = min(bike_clean$lat) - 0.02,
+  right  = max(bike_clean$long) + 0.02,
+  top    = max(bike_clean$lat) + 0.02
+)
+
+# 4. 获取地图底图（使用 Stadia Maps）
+map_background <- get_stadiamap(
+  bbox = toronto_bbox,
+  zoom = 11,
+  maptype = "stamen_toner_lite"
+)
+
+# 5. 绘制热力图
+p_heatmap <- ggmap(map_background) +
+  stat_bin2d(
+    data = bike_clean,
+    aes(x = long, y = lat, fill = after_stat(count)),
+    bins = 45,
+    alpha = 0.85
+  ) +
+  scale_fill_viridis_c(option = "plasma", name = "Number of\nIncidents") +
+  labs(
+    title = "Spatial Distribution of Bike Theft Incidents",
+    subtitle = "Each grid cell represents the count of thefts in that area",
+    x = "Longitude",
+    y = "Latitude"
+  ) +
+  theme_minimal(base_size = 11) +
+  theme(
+    plot.title = element_text(face = "bold", hjust = 0.5, size = 16),
+    plot.subtitle = element_text(hjust = 0.5, size = 10, color = "gray35"),
+    legend.position = "right",
+    panel.grid = element_blank()
+  )
+
+p_heatmap
+```
+
+```{r}
+library(export)
+graph2ppt(x = p_heatmap, file = "~/Desktop/heatmap.pptx", width = 10, height = 7)
+```
+
+```{r}
+# 6. 统计每个社区案件数
+top10_neighborhoods <- bike_clean %>%
+  count(neighborhood, sort = TRUE) %>%
+  slice_head(n = 10) %>%
+  mutate(
+    neighborhood = fct_reorder(neighborhood, n)
+  )
+
+# 7. 第一页右下：Top 10 高风险社区柱状图
+p_bar <- ggplot(top10_neighborhoods, aes(x = neighborhood, y = n, fill = n)) +
+  geom_col(width = 0.75) +
+  geom_text(
+    aes(label = n),
+    hjust = -0.1,
+    size = 3.5
+  ) +
+  coord_flip() +
+  scale_fill_viridis_c(option = "plasma", guide = "none") +
+  labs(
+    title = "Top 10 High-Risk Neighborhoods",
+    subtitle = "Based on incident frequency",
+    x = "Neighborhood",
+    y = "Number of Theft Incidents"
+  ) +
+  theme_minimal(base_size = 11) +
+  theme(
+    plot.title = element_text(face = "bold", hjust = 0.5, size = 14),
+    plot.subtitle = element_text(hjust = 0.5, size = 9, color = "gray35"),
+    axis.text.y = element_text(size = 8),
+    panel.grid.major.y = element_blank()
+  ) +
+  expand_limits(y = max(top10_neighborhoods$n) * 1.15)
+
+p_bar
+
+```
+
+```{r}
+library(export)
+graph2ppt(x = p_bar, file = "~/Desktop/top10_bar.pptx", width = 8, height = 5)
+```
+
+```{r}
+# 如未安装，先运行
+install.packages(c("tidyverse", "leaflet", "htmlwidgets", "scales"))
+
+library(tidyverse)
+library(leaflet)
+library(htmlwidgets)
+library(scales)
+
+
+
+# 2. 按街区统计盗窃案件数
+bike_neigh <- bicycle %>%
+  filter(!is.na(long), !is.na(lat), !is.na(neighborhood)) %>%
+  group_by(neighborhood, long, lat) %>%
+  summarise(
+    incidents = n(),
+    avg_cost = round(mean(bike_cost, na.rm = TRUE), 1),
+    .groups = "drop"
+  )
+
+# 3. 设置颜色和点大小
+pal <- colorNumeric(
+  palette = "YlOrRd",
+  domain = bike_neigh$incidents
+)
+
+bike_neigh <- bike_neigh %>%
+  mutate(
+    radius = rescale(sqrt(incidents), to = c(5, 25)),
+    popup_text = paste0(
+      "<b>Neighborhood:</b> ", neighborhood, "<br>",
+      "<b>Theft incidents:</b> ", incidents, "<br>",
+      "<b>Average bike cost:</b> $", avg_cost
+    )
+  )
+
+# 4. 生成 leaflet 交互式地图
+bike_map <- leaflet(bike_neigh) %>%
+  addProviderTiles(providers$CartoDB.Positron) %>%
+  addCircleMarkers(
+    lng = ~long,
+    lat = ~lat,
+    radius = ~radius,
+    color = ~pal(incidents),
+    fillColor = ~pal(incidents),
+    fillOpacity = 0.75,
+    stroke = TRUE,
+    weight = 1,
+    popup = ~popup_text,
+    label = ~paste0(neighborhood, ": ", incidents, " cases")
+  ) %>%
+  addLegend(
+    position = "bottomright",
+    pal = pal,
+    values = ~incidents,
+    title = "Number of<br>Bike Thefts",
+    opacity = 0.8
+  ) %>%
+  setView(
+    lng = mean(bike_neigh$long),
+    lat = mean(bike_neigh$lat),
+    zoom = 11
+  )
+
+# 5. 保存为 HTML 文件
+saveWidget(
+  bike_map,
+  file = "bike_theft_interactive_map.html",
+  selfcontained = TRUE
+)
+
+# 6. 自动在浏览器中打开
+browseURL("bike_theft_interactive_map.html")
+```
+
+```{r}
+library(tidyverse)
+library(fields)
+library(gstat)
+library(sf)
+library(sp)
+
+bicycle <- read_csv("four_dataset/bicycle.csv")
+
+bike_unique <- bicycle %>%
+  filter(!is.na(long), !is.na(lat), !is.na(neighborhood)) %>%
+  group_by(neighborhood, long, lat) %>%
+  summarise(
+    theft_count = n(),
+    avg_cost = mean(bike_cost, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  mutate(log_count = log1p(theft_count))
+```
+
+```{r}
+install.packages(c("tidyverse", "fields", "sf", "sp", "gstat", "viridis"))
+
+library(tidyverse)
+library(fields)
+library(sf)
+library(sp)
+library(gstat)
+library(viridis)
+
+# 1. 读取并聚合数据
+bicycle <- read_csv("four_dataset/bicycle.csv")
+
+bike_neigh <- bicycle %>%
+  filter(!is.na(long), !is.na(lat), !is.na(neighborhood)) %>%
+  group_by(neighborhood, long, lat) %>%
+  summarise(
+    incidents = n(),
+    .groups = "drop"
+  ) %>%
+  mutate(
+    log_count = log1p(incidents)
+  )
+
+# 2. 投影到 UTM，距离单位更合理
+bike_sf <- st_as_sf(
+  bike_neigh,
+  coords = c("long", "lat"),
+  crs = 4326,
+  remove = FALSE
+) %>%
+  st_transform(32617)
+
+coords_utm <- st_coordinates(bike_sf)
+
+bike_model <- bike_neigh %>%
+  mutate(
+    x_km = coords_utm[, 1] / 1000,
+    y_km = coords_utm[, 2] / 1000
+  )
+```
+
+```{r}
+Wt_IDW <- function(theta, d) {
+  d[d == 0] <- 1e-8
+  1 / (d ^ theta)
+}
+
+LOOCV_IDW <- function(theta, data) {
+  n <- nrow(data)
+  errors <- numeric(n)
+
+  coords <- as.matrix(data[, c("x_km", "y_km")])
+  dist_mat <- rdist(coords)
+
+  for (i in 1:n) {
+    train_y <- data$log_count[-i]
+    test_y <- data$log_count[i]
+
+    d <- dist_mat[i, -i]
+    w <- Wt_IDW(theta, d)
+    w <- w / sum(w)
+
+    pred <- sum(w * train_y)
+    errors[i] <- (pred - test_y)^2
+  }
+
+  sqrt(mean(errors, na.rm = TRUE))
+}
+
+theta_grid <- seq(1, 6, by = 0.5)
+
+idw_results <- tibble(
+  theta = theta_grid,
+  rmse = map_dbl(theta_grid, ~ LOOCV_IDW(.x, bike_model))
+) %>%
+  mutate(best = rmse == min(rmse))
+
+best_theta <- idw_results$theta[which.min(idw_results$rmse)]
+best_idw_rmse <- min(idw_results$rmse)
+
+p_idw_tuning <- ggplot(idw_results, aes(x = theta, y = rmse)) +
+  geom_line(color = "#2C7FB8", linewidth = 1.2) +
+  geom_point(aes(color = best), size = 3) +
+  geom_text(
+    data = filter(idw_results, best),
+    aes(label = paste0("Best θ = ", theta)),
+    vjust = -1,
+    color = "red",
+    fontface = "bold",
+    size = 4
+  ) +
+  scale_color_manual(
+    values = c("FALSE" = "#2C7FB8", "TRUE" = "red"),
+    guide = "none"
+  ) +
+  labs(
+    title = "LOOCV Parameter Tuning for IDW",
+    subtitle = "Prediction target: log(theft_count + 1)",
+    x = expression(theta~"(Power Parameter)"),
+    y = "LOOCV RMSE"
+  ) +
+  theme_minimal(base_size = 13) +
+  theme(
+    plot.title = element_text(face = "bold", hjust = 0.5),
+    plot.subtitle = element_text(hjust = 0.5, color = "gray35"),
+    panel.grid.minor = element_blank()
+  )
+
+p_idw_tuning
+```
+
+```{r}
+library(export)
+graph2ppt(x = p_idw_tuning, file = "~/Desktop/power_parameter.pptx", width = 8, height = 5)
+```
+
+```{r}
+# Kriging 的 LOOCV RMSE
+bike_sp <- bike_model
+coordinates(bike_sp) <- ~ x_km + y_km
+proj4string(bike_sp) <- CRS("+proj=utm +zone=17 +datum=WGS84 +units=km +no_defs")
+
+v_emp <- variogram(log_count ~ 1, bike_sp)
+
+v_fit <- fit.variogram(
+  v_emp,
+  model = vgm(
+    psill = var(bike_model$log_count) * 0.8,
+    model = "Sph",
+    range = 10,
+    nugget = var(bike_model$log_count) * 0.2
+  )
+)
+
+kriging_cv <- krige.cv(
+  log_count ~ 1,
+  bike_sp,
+  model = v_fit,
+  nfold = nrow(bike_model)
+)
+
+kriging_rmse <- sqrt(mean(
+  (kriging_cv$observed - kriging_cv$var1.pred)^2,
+  na.rm = TRUE
+))
+
+kriging_rmse
+```
+
+```{r}
+#线性回归模型的 LOOCV RMSE
+LOOCV_lm_basis <- function(data) {
+  n <- nrow(data)
+  errors <- numeric(n)
+
+  for (i in 1:n) {
+    train <- data[-i, ]
+    test <- data[i, ]
+
+    model <- lm(
+      log_count ~ x_km + y_km + I(x_km^2) + I(y_km^2) + I(x_km * y_km),
+      data = train
+    )
+
+    pred <- predict(model, newdata = test)
+    errors[i] <- (pred - test$log_count)^2
+  }
+
+  sqrt(mean(errors, na.rm = TRUE))
+}
+
+lm_rmse <- LOOCV_lm_basis(bike_model)
+
+lm_rmse
+```
+
+```{r}
+# 均值基线模型的 LOOCV RMSE
+LOOCV_mean_baseline <- function(data) {
+  n <- nrow(data)
+  errors <- numeric(n)
+
+  for (i in 1:n) {
+    train_y <- data$log_count[-i]
+    test_y <- data$log_count[i]
+
+    pred <- mean(train_y, na.rm = TRUE)
+    errors[i] <- (pred - test_y)^2
+  }
+
+  sqrt(mean(errors, na.rm = TRUE))
+}
+
+baseline_rmse <- LOOCV_mean_baseline(bike_model)
+
+baseline_rmse
+```
+
+```{r}
+# 多模型 LOOCV 横向排名条形图
+model_rank <- tibble(
+  model = c(
+    paste0("IDW θ = ", best_theta),
+    "Ordinary Kriging",
+    "Linear Regression with Basis Functions",
+    "Mean Baseline"
+  ),
+  rmse = c(
+    best_idw_rmse,
+    kriging_rmse,
+    lm_rmse,
+    baseline_rmse
+  )
+) %>%
+  arrange(rmse) %>%
+  mutate(
+    model = fct_reorder(model, rmse),
+    rank = row_number()
+  )
+
+p_model_rank <- ggplot(model_rank, aes(x = rmse, y = model, fill = rmse)) +
+  geom_col(width = 0.65) +
+  geom_text(
+    aes(label = round(rmse, 3)),
+    hjust = -0.15,
+    size = 4,
+    fontface = "bold"
+  ) +
+  scale_fill_viridis_c(option = "plasma", direction = -1, guide = "none") +
+  expand_limits(x = max(model_rank$rmse) * 1.15) +
+  labs(
+    title = "LOOCV Model Ranking",
+    subtitle = "All models predict log(theft_count + 1); lower RMSE is better",
+    x = "LOOCV RMSE",
+    y = NULL
+  ) +
+  theme_minimal(base_size = 13) +
+  theme(
+    plot.title = element_text(face = "bold", hjust = 0.5),
+    plot.subtitle = element_text(hjust = 0.5, color = "gray35"),
+    axis.text.y = element_text(face = "bold"),
+    panel.grid.major.y = element_blank(),
+    panel.grid.minor = element_blank()
+  )
+
+p_model_rank
+```
+```{r}
+library(export)
+graph2ppt(x = p_model_rank, file = "~/Desktop/loocv_model_ranking.pptx", width = 8, height = 5)
+```
+
+```{r}
+install.packages("plotly")
+library(plotly)
+# 一行代码转成交互式
+interactive_plot <- ggplotly(p_idw_tuning)
+library(htmlwidgets)
+
+# 保存为HTML，selfcontained=TRUE表示所有资源打包在一个文件里
+saveWidget(interactive_plot, file = "model_comparison.html", selfcontained = TRUE)
+# 显示看看效果
+interactive_plot
+```
+
+
+```{r}
+install.packages(c(
+  "tidyverse", "fields", "sf", "sp", "gstat",
+  "plotly", "DT", "htmltools", "viridis"
+))
+
+library(tidyverse)
+library(fields)
+library(sf)
+library(sp)
+library(gstat)
+library(plotly)
+library(DT)
+library(htmltools)
+library(viridis)
+```
+
+```{r}
+# 1. 读取并聚合数据
+bicycle <- read_csv("four_dataset/bicycle.csv")
+
+bike_neigh <- bicycle %>%
+  filter(!is.na(long), !is.na(lat), !is.na(neighborhood)) %>%
+  group_by(neighborhood, long, lat) %>%
+  summarise(
+    theft_count = n(),
+    .groups = "drop"
+  ) %>%
+  mutate(
+    log_count = log1p(theft_count)
+  )
+
+# 2. 投影坐标：用于距离计算
+bike_sf <- st_as_sf(
+  bike_neigh,
+  coords = c("long", "lat"),
+  crs = 4326,
+  remove = FALSE
+) %>%
+  st_transform(32617)
+
+coords_utm <- st_coordinates(bike_sf)
+
+bike_model <- bike_neigh %>%
+  mutate(
+    x_km = coords_utm[, 1] / 1000,
+    y_km = coords_utm[, 2] / 1000
+  )
+```
+
+```{r}
+# 3. IDW LOOCV 调参
+Wt_IDW <- function(theta, d) {
+  d[d == 0] <- 1e-8
+  1 / (d ^ theta)
+}
+
+LOOCV_IDW <- function(theta, data) {
+  n <- nrow(data)
+  errors <- numeric(n)
+
+  coords <- as.matrix(data[, c("x_km", "y_km")])
+  dist_mat <- rdist(coords)
+
+  for (i in 1:n) {
+    train_y <- data$log_count[-i]
+    test_y <- data$log_count[i]
+
+    d <- dist_mat[i, -i]
+    w <- Wt_IDW(theta, d)
+    w <- w / sum(w)
+
+    pred <- sum(w * train_y)
+    errors[i] <- (pred - test_y)^2
+  }
+
+  sqrt(mean(errors, na.rm = TRUE))
+}
+
+theta_grid <- seq(1, 6, by = 0.5)
+
+idw_results <- tibble(
+  theta = theta_grid,
+  rmse = map_dbl(theta_grid, ~ LOOCV_IDW(.x, bike_model))
+) %>%
+  mutate(
+    best = rmse == min(rmse),
+    label = paste0(
+      "θ = ", theta,
+      "<br>LOOCV RMSE = ", round(rmse, 4)
+    )
+  )
+
+best_theta <- idw_results$theta[which.min(idw_results$rmse)]
+best_idw_rmse <- min(idw_results$rmse)
+```
+
+
+```{r}
+# 4. Kriging LOOCV
+bike_sp <- bike_model
+coordinates(bike_sp) <- ~ x_km + y_km
+proj4string(bike_sp) <- CRS("+proj=utm +zone=17 +datum=WGS84 +units=km +no_defs")
+
+v_emp <- variogram(log_count ~ 1, bike_sp)
+
+v_fit <- fit.variogram(
+  v_emp,
+  model = vgm(
+    psill = var(bike_model$log_count) * 0.8,
+    model = "Sph",
+    range = 10,
+    nugget = var(bike_model$log_count) * 0.2
+  )
+)
+
+kriging_cv <- krige.cv(
+  log_count ~ 1,
+  bike_sp,
+  model = v_fit,
+  nfold = nrow(bike_model)
+)
+
+kriging_rmse <- sqrt(mean(
+  (kriging_cv$observed - kriging_cv$var1.pred)^2,
+  na.rm = TRUE
+))
+```
+
+
+```{r}
+# 5. Linear Regression with Basis Functions LOOCV
+LOOCV_lm_basis <- function(data) {
+  n <- nrow(data)
+  errors <- numeric(n)
+
+  for (i in 1:n) {
+    train <- data[-i, ]
+    test <- data[i, ]
+
+    model <- lm(
+      log_count ~ x_km + y_km + I(x_km^2) + I(y_km^2) + I(x_km * y_km),
+      data = train
+    )
+
+    pred <- predict(model, newdata = test)
+    errors[i] <- (pred - test$log_count)^2
+  }
+
+  sqrt(mean(errors, na.rm = TRUE))
+}
+
+lm_rmse <- LOOCV_lm_basis(bike_model)
+```
+
+
+```{r}
+# 6. Mean Baseline LOOCV
+LOOCV_mean_baseline <- function(data) {
+  n <- nrow(data)
+  errors <- numeric(n)
+
+  for (i in 1:n) {
+    train_y <- data$log_count[-i]
+    test_y <- data$log_count[i]
+
+    pred <- mean(train_y, na.rm = TRUE)
+    errors[i] <- (pred - test_y)^2
+  }
+
+  sqrt(mean(errors, na.rm = TRUE))
+}
+
+baseline_rmse <- LOOCV_mean_baseline(bike_model)
+```
+
+```{r}
+
+# 7. Interactive Parameter Tuning Plot
+p_tuning <- ggplot(
+  idw_results,
+  aes(
+    x = theta,
+    y = rmse,
+    text = label
+  )
+) +
+  geom_line(color = "#2563EB", linewidth = 1.2) +
+  geom_point(size = 3, color = "#2563EB") +
+  geom_point(
+    data = filter(idw_results, best),
+    aes(x = theta, y = rmse, text = label),
+    color = "#DC2626",
+    size = 4,
+    inherit.aes = FALSE
+  ) +
+  geom_text(
+    data = filter(idw_results, best),
+    aes(x = theta, y = rmse, label = paste0("Best θ = ", theta)),
+    vjust = -1,
+    color = "#DC2626",
+    fontface = "bold",
+    size = 4,
+    inherit.aes = FALSE
+  ) +
+  labs(
+    title = "Interactive Parameter Tuning Plot",
+    subtitle = "IDW model predicts log(theft_count + 1); lower LOOCV RMSE is better",
+    x = "IDW Power Parameter θ",
+    y = "LOOCV RMSE"
+  ) +
+  theme_minimal(base_size = 13) +
+  theme(
+    plot.title = element_text(face = "bold"),
+    plot.subtitle = element_text(color = "gray35"),
+    panel.grid.minor = element_blank()
+  )
+
+interactive_tuning <- plotly::ggplotly(
+  p_tuning,
+  tooltip = "text"
+)
+```
+
+```{r}
+# 8. 构建专业模型对比表格（精简版）
+model_table <- tibble(
+  Model = c(
+    paste0("IDW (θ = ", best_theta, ")"),
+    "Ordinary Kriging",
+    "Linear Regression",
+    "Mean Baseline"
+  ),
+  `Prediction Target` = rep("log(theft_count + 1)", 4),
+  `LOOCV RMSE` = c(
+    best_idw_rmse,
+    kriging_rmse,
+    lm_rmse,
+    baseline_rmse
+  ),
+  `Key Parameters` = c(
+    paste0("θ = ", best_theta),
+    paste0(
+      "Spherical, range = ",
+      round(v_fit$range[2], 2),
+      " km"
+    ),
+    "x, y, x², y², xy",
+    "Global mean"
+  )
+) %>%
+  arrange(`LOOCV RMSE`) %>%
+  mutate(
+    Rank = row_number(),
+    `LOOCV RMSE` = round(`LOOCV RMSE`, 4)
+  ) %>%
+  select(
+    Rank,
+    Model,
+    `Prediction Target`,
+    `LOOCV RMSE`,
+    `Key Parameters`
+  )
+
+# 生成交互式 HTML 表格（精简版）
+model_table_html <- datatable(
+  model_table,
+  rownames = FALSE,
+  options = list(
+    pageLength = 4,
+    dom = "t",
+    ordering = TRUE,
+    columnDefs = list(
+      list(className = "dt-center", targets = c(0, 3))
+    )
+  ),
+  caption = htmltools::tags$caption(
+    style = "caption-side: top; text-align: left; font-weight: bold; font-size: 18px;",
+    "Model Comparison Table: LOOCV Performance on the Same Prediction Target"
+  )
+) %>%
+  formatStyle(
+    "Rank",
+    backgroundColor = styleEqual(
+      c(1, 2, 3, 4),
+      c("#DCFCE7", "#EFF6FF", "#FEF3C7", "#FEE2E2")
+    ),
+    fontWeight = "bold"
+  ) %>%
+  formatStyle(
+    "LOOCV RMSE",
+    fontWeight = "bold",
+    color = "#111827"
+  )
+
+# 显示表格
+model_table_html
+```
+
+
+```{r}
+if (!exists("interactive_tuning")) {
+  interactive_tuning <- plotly::ggplotly(p_tuning, tooltip = "text")
+}
+```
+
+```{r}
+# 9. 组合成 HTML 页面
+if (!exists("interactive_tuning")) {
+  interactive_tuning <- plotly::ggplotly(p_tuning, tooltip = "text")
+}
+
+dashboard <- tagList(
+  tags$head(
+    tags$title("Bike Theft Model Comparison Dashboard"),
+    tags$style(HTML("
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        background: #F8FAFC;
+        margin: 0;
+        padding: 28px;
+        color: #111827;
+      }
+      .header {
+        margin-bottom: 22px;
+      }
+      .header h1 {
+        margin: 0;
+        font-size: 30px;
+        font-weight: 800;
+        color: #1F2937;
+      }
+      .header p {
+        margin-top: 8px;
+        color: #4B5563;
+        font-size: 15px;
+      }
+      .grid {
+        display: grid;
+        grid-template-columns: 48% 52%;
+        gap: 22px;
+        align-items: start;
+      }
+      .card {
+        background: white;
+        border: 1px solid #E5E7EB;
+        border-radius: 10px;
+        padding: 18px;
+        box-shadow: 0 8px 22px rgba(15, 23, 42, 0.06);
+      }
+      .note {
+        margin-top: 18px;
+        padding: 14px 16px;
+        border-left: 4px solid #2563EB;
+        background: #EFF6FF;
+        color: #1E3A8A;
+        font-size: 14px;
+      }
+    "))
+  ),
+
+  div(
+    class = "header",
+    h1("Bike Theft Spatial Prediction: Model Comparison"),
+    p("All models predict the same target: log(theft_count + 1). LOOCV RMSE is therefore directly comparable.")
+  ),
+
+  div(
+    class = "grid",
+    div(
+      class = "card",
+      interactive_tuning
+    ),
+    div(
+      class = "card",
+      model_table_html
+    )
+  ),
+
+  div(
+    class = "note",
+    strong("Interpretation: "),
+    "The best-ranked model has the lowest LOOCV RMSE on the same transformed theft-count target. ",
+    "This supports a clean and fair model-selection conclusion in the PPT."
+  )
+)
+
+# 10. 保存 HTML
+save_html(
+  dashboard,
+  file = "bike_theft_model_comparison_dashboard.html",
+  libdir = "bike_theft_model_comparison_dashboard_files"
+)
+
+browseURL("bike_theft_model_comparison_dashboard.html")
+
+```
+
+```{r}
+# 如未安装，先运行
+install.packages(c("tidyverse", "sf", "viridis", "patchwork"))
+
+library(tidyverse)
+library(sf)
+library(viridis)
+library(patchwork)
+
+# =========================
+# 1. 读取并聚合数据
+# =========================
+
+
+bike_neigh <- bicycle %>%
+  filter(!is.na(long), !is.na(lat), !is.na(neighborhood)) %>%
+  group_by(neighborhood, long, lat) %>%
+  summarise(
+    theft_count = n(),
+    .groups = "drop"
+  ) %>%
+  mutate(
+    log_count = log1p(theft_count)
+  )
+
+# 转为 sf，并投影到 UTM，方便距离计算
+bike_sf <- st_as_sf(
+  bike_neigh,
+  coords = c("long", "lat"),
+  crs = 4326,
+  remove = FALSE
+) %>%
+  st_transform(32617)
+
+coords_utm <- st_coordinates(bike_sf)
+
+bike_model <- bike_neigh %>%
+  mutate(
+    x_km = coords_utm[, 1] / 1000,
+    y_km = coords_utm[, 2] / 1000
+  )
+
+# =========================
+# 2. IDW 函数
+# =========================
+
+idw_predict <- function(train_coords, train_values, pred_coords, theta = 3) {
+  pred <- numeric(nrow(pred_coords))
+  
+  for (i in seq_len(nrow(pred_coords))) {
+    d <- sqrt(
+      (train_coords[, 1] - pred_coords[i, 1])^2 +
+        (train_coords[, 2] - pred_coords[i, 2])^2
+    )
+    
+    d[d == 0] <- 1e-8
+    
+    w <- 1 / (d ^ theta)
+    w <- w / sum(w)
+    
+    pred[i] <- sum(w * train_values)
+  }
+  
+  pred
+}
+
+# 使用 LOOCV 得到的最佳 theta；如果单独运行本 chunk，则默认用 3
+theta_best <- if (exists("best_theta")) best_theta else 3
+
+train_coords <- as.matrix(bike_model[, c("x_km", "y_km")])
+train_values <- bike_model$log_count
+
+# =========================
+# 3. 生成预测网格
+# =========================
+
+grid_utm <- expand.grid(
+  x_km = seq(min(bike_model$x_km), max(bike_model$x_km), length.out = 100),
+  y_km = seq(min(bike_model$y_km), max(bike_model$y_km), length.out = 80)
+)
+
+grid_coords <- as.matrix(grid_utm[, c("x_km", "y_km")])
+
+grid_utm$pred_log_count <- idw_predict(
+  train_coords = train_coords,
+  train_values = train_values,
+  pred_coords = grid_coords,
+  theta = theta_best
+)
+
+grid_utm$pred_theft_count <- expm1(grid_utm$pred_log_count)
+
+# 转回经纬度只用于检查/弹窗等展示，不用于 geom_raster 绘图。
+# 注意 EPSG:32617 的单位是米，所以需要明确创建 x_m/y_m。
+grid_sf <- st_as_sf(
+  grid_utm %>%
+    mutate(
+      x_m = x_km * 1000,
+      y_m = y_km * 1000
+    ),
+  coords = c("x_m", "y_m"),
+  crs = 32617,
+  remove = FALSE
+)
+
+grid_ll <- st_transform(grid_sf, 4326)
+grid_lonlat <- st_coordinates(grid_ll)
+
+grid_plot <- grid_utm %>%
+  mutate(
+    long = grid_lonlat[, 1],
+    lat = grid_lonlat[, 2]
+  )
+
+# =========================
+# 4. LOOCV 误差：作为 IDW 不确定性
+# =========================
+
+n <- nrow(bike_model)
+loocv_pred <- numeric(n)
+
+for (i in seq_len(n)) {
+  train_i <- bike_model[-i, ]
+  test_i <- bike_model[i, ]
+  
+  loocv_pred[i] <- idw_predict(
+    train_coords = as.matrix(train_i[, c("x_km", "y_km")]),
+    train_values = train_i$log_count,
+    pred_coords = as.matrix(test_i[, c("x_km", "y_km")]),
+    theta = theta_best
+  )
+}
+
+bike_model <- bike_model %>%
+  mutate(
+    loocv_error = log_count - loocv_pred,
+    squared_error = loocv_error^2,
+    abs_error = abs(loocv_error)
+  )
+
+idw_rmse <- sqrt(mean(bike_model$squared_error, na.rm = TRUE))
+
+# 将 LOOCV 误差也插值成连续不确定性面
+grid_plot$uncertainty <- idw_predict(
+  train_coords = train_coords,
+  train_values = bike_model$squared_error,
+  pred_coords = grid_coords,
+  theta = theta_best
+)
+
+# =========================
+# 5. 绘制 IDW 预测风险面
+# =========================
+
+grid_plot <- as.data.frame(grid_plot)
+
+stopifnot(
+  is.data.frame(grid_plot),
+  all(c("x_km", "y_km", "pred_theft_count", "uncertainty") %in% names(grid_plot))
+)
+
+p_idw_risk <- ggplot(
+  grid_plot,
+  aes(x = x_km, y = y_km, fill = pred_theft_count)
+) +
+  geom_raster(interpolate = TRUE) +
+  geom_point(
+    data = bike_model,
+    aes(x = x_km, y = y_km),
+    inherit.aes = FALSE,
+    color = "white",
+    size = 0.8,
+    alpha = 0.75
+  ) +
+  scale_fill_viridis_c(
+    option = "magma",
+    name = "Predicted\nTheft Count"
+  ) +
+  coord_fixed(expand = FALSE) +
+  labs(
+    title = "IDW Predicted Bike Theft Risk Surface",
+    subtitle = paste0(
+      "Prediction target: log(theft_count + 1), theta = ",
+      theta_best,
+      ", LOOCV RMSE = ",
+      round(idw_rmse, 3)
+    ),
+    x = "UTM Easting (km)",
+    y = "UTM Northing (km)"
+  ) +
+  theme_minimal(base_size = 13) +
+  theme(
+    plot.title = element_text(face = "bold"),
+    plot.subtitle = element_text(color = "gray35"),
+    panel.grid.minor = element_blank()
+  )
+
+p_idw_risk
+
+
+# =========================
+# 6. 修复版：绘制 IDW 不确定性图
+# =========================
+
+p_idw_uncertainty <- ggplot(
+  grid_plot,
+  aes(x = x_km, y = y_km, fill = uncertainty)
+) +
+  geom_raster(interpolate = TRUE) +
+  geom_point(
+    data = bike_model,
+    aes(x = x_km, y = y_km),
+    inherit.aes = FALSE,
+    color = "white",
+    size = 0.8,
+    alpha = 0.75
+  ) +
+  scale_fill_viridis_c(
+    option = "cividis",
+    name = "LOOCV\nSquared Error"
+  ) +
+  coord_fixed(expand = FALSE) +
+  labs(
+    title = "IDW Empirical Prediction Uncertainty",
+    subtitle = "Uncertainty is approximated by interpolated LOOCV squared errors",
+    x = "UTM Easting (km)",
+    y = "UTM Northing (km)"
+  ) +
+  theme_minimal(base_size = 13) +
+  theme(
+    plot.title = element_text(face = "bold"),
+    plot.subtitle = element_text(color = "gray35"),
+    panel.grid.minor = element_blank()
+  )
+
+p_idw_uncertainty
+
+
+# =========================
+# 7. 合并展示并导出
+# =========================
+
+p_combined <- p_idw_risk + p_idw_uncertainty +
+  plot_annotation(
+    title = "IDW Prediction and Empirical Uncertainty",
+    subtitle = "Left: predicted theft risk | Right: uncertainty from LOOCV errors"
+  )
+
+p_combined
+
+ggsave(
+  "idw_predicted_risk_surface.png",
+  p_idw_risk,
+  width = 8,
+  height = 5,
+  dpi = 300
+)
+
+ggsave(
+  "idw_uncertainty_surface.png",
+  p_idw_uncertainty,
+  width = 8,
+  height = 5,
+  dpi = 300
+)
+
+ggsave(
+  "idw_risk_and_uncertainty_combined.png",
+  p_combined,
+  width = 14,
+  height = 6,
+  dpi = 300
+)
+```
+```{r}
+# 1. 检查网格预测值
+summary(grid_plot$pred_theft_count)   # 看是否为 NA 或全为 0
+
+# 2. 检查预测网格的坐标范围
+range(grid_plot$long)
+range(grid_plot$lat)
+
+# 3. 检查实际数据点的坐标范围
+range(bike_model$long)
+range(bike_model$lat)
+
+# 4. 查看网格数据的前几行
+head(grid_plot)
+```
+```{r}
+summary(bike_model$log_count)   # 应为有限数值
+```
+
+```{r}
+# =========================
+# 4. IDW 平滑版季节分面热力图
+# =========================
+
+idw_predict <- function(train_coords, train_values, pred_coords, theta = 3) {
+  pred <- numeric(nrow(pred_coords))
+
+  for (i in seq_len(nrow(pred_coords))) {
+    d <- sqrt(
+      (train_coords[, 1] - pred_coords[i, 1])^2 +
+        (train_coords[, 2] - pred_coords[i, 2])^2
+    )
+
+    d[d == 0] <- 1e-8
+
+    w <- 1 / (d ^ theta)
+    w <- w / sum(w)
+
+    pred[i] <- sum(w * train_values)
+  }
+
+  pred
+}
+
+# 先创建季节聚合数据，保证本 chunk 可以独立运行
+bike_clean_season <- bicycle %>%
+  filter(!is.na(long), !is.na(lat), !is.na(neighborhood), !is.na(date)) %>%
+  mutate(
+    date = as.Date(date),
+    quarter_label = paste0("Q", lubridate::quarter(date)),
+    quarter_label = factor(quarter_label, levels = c("Q1", "Q2", "Q3", "Q4"))
+  )
+
+quarter_neigh <- bike_clean_season %>%
+  group_by(quarter_label, neighborhood, long, lat) %>%
+  summarise(
+    theft_count = n(),
+    .groups = "drop"
+  )
+
+# 投影到 UTM，避免经纬度距离失真
+quarter_sf <- st_as_sf(
+  quarter_neigh,
+  coords = c("long", "lat"),
+  crs = 4326,
+  remove = FALSE
+) %>%
+  st_transform(32617)
+
+coords_utm <- st_coordinates(quarter_sf)
+
+quarter_model <- quarter_neigh %>%
+  mutate(
+    x_km = coords_utm[, 1] / 1000,
+    y_km = coords_utm[, 2] / 1000,
+    log_count = log1p(theft_count)
+  )
+
+# 创建统一预测网格
+grid_utm <- expand.grid(
+  x_km = seq(min(quarter_model$x_km), max(quarter_model$x_km), length.out = 80),
+  y_km = seq(min(quarter_model$y_km), max(quarter_model$y_km), length.out = 60)
+)
+
+grid_coords <- as.matrix(grid_utm[, c("x_km", "y_km")])
+
+# 使用前面 LOOCV 得到的最佳 theta；如果单独运行本 chunk，则默认用 3
+theta_best <- if (exists("best_theta")) best_theta else 3
+
+seasonal_predictions <- list()
+
+for (q in levels(quarter_model$quarter_label)) {
+  train_q <- quarter_model %>%
+    filter(quarter_label == q)
+
+  pred_q <- idw_predict(
+    train_coords = as.matrix(train_q[, c("x_km", "y_km")]),
+    train_values = train_q$log_count,
+    pred_coords = grid_coords,
+    theta = theta_best
+  )
+
+  seasonal_predictions[[q]] <- grid_utm %>%
+    mutate(
+      quarter_label = q,
+      pred_log_count = pred_q,
+      pred_theft_count = expm1(pred_q)
+    )
+}
+
+seasonal_grid <- bind_rows(seasonal_predictions) %>%
+  mutate(
+    quarter_label = factor(
+      quarter_label,
+      levels = c("Q1", "Q2", "Q3", "Q4")
+    )
+  )
+
+p_seasonal_idw <- ggplot(
+  seasonal_grid,
+  aes(x = x_km, y = y_km, fill = pred_theft_count)
+) +
+  geom_raster(interpolate = TRUE) +
+  geom_point(
+    data = quarter_model,
+    aes(x = x_km, y = y_km),
+    inherit.aes = FALSE,
+    color = "white",
+    size = 0.45,
+    alpha = 0.55
+  ) +
+  scale_fill_viridis_c(
+    option = "magma",
+    name = "Predicted\nTheft Count"
+  ) +
+  facet_wrap(~ quarter_label, nrow = 2) +
+  coord_fixed(expand = FALSE) +
+  labs(
+    title = "Seasonal Variation of IDW Predicted Theft Risk",
+    subtitle = paste0("Q1-Q4 risk surfaces, IDW theta = ", theta_best),
+    x = "UTM Easting (km)",
+    y = "UTM Northing (km)"
+  ) +
+  theme_minimal(base_size = 13) +
+  theme(
+    plot.title = element_text(face = "bold", hjust = 0.5),
+    plot.subtitle = element_text(hjust = 0.5, color = "gray35"),
+    strip.text = element_text(face = "bold", size = 13),
+    strip.background = element_rect(fill = "gray95", color = NA),
+    panel.grid = element_blank(),
+    legend.position = "right"
+  )
+
+p_seasonal_idw
+```
