@@ -1,0 +1,692 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Supplementary Materials — Bicycle Theft Spatial Risk Prediction</title>
+<meta name="description" content="Extended methodology, temporal trends, spatial autocorrelation evidence, and full model comparison table supporting the Bicycle Theft Spatial Risk Prediction presentation." />
+
+<!-- Fonts: General Sans (display) + Satoshi (body), via Fontshare -->
+<link rel="preconnect" href="https://api.fontshare.com" />
+<link href="https://api.fontshare.com/v2/css?f[]=general-sans@500,600&f[]=satoshi@400,500,600,700&display=swap" rel="stylesheet" />
+
+<link rel="stylesheet" href="./base.css" />
+<link rel="stylesheet" href="./style.css" />
+
+<!-- Chart.js -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+</head>
+<body>
+
+<a href="#main" class="sr-only">Skip to content</a>
+
+<header class="site-header">
+  <div class="site-header__inner">
+    <a href="#top" class="brand" aria-label="Bicycle Theft Spatial Risk Prediction — Supplementary Materials">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <circle cx="6" cy="17" r="3.4" stroke="currentColor" stroke-width="1.6" style="color:var(--color-primary)"/>
+        <circle cx="18" cy="17" r="3.4" stroke="currentColor" stroke-width="1.6" style="color:var(--color-primary)"/>
+        <path d="M6 17L10 8H14L18 17M10 8H8M14 8L16.5 12" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="color:var(--color-primary)"/>
+        <circle cx="14" cy="8" r="1.3" fill="currentColor" style="color:var(--color-primary)"/>
+      </svg>
+      <span>Supplementary&nbsp;Materials</span>
+    </a>
+    <nav class="main-nav nav-scroll" aria-label="Section navigation">
+      <a href="#trends">Temporal Trends</a>
+      <a href="#autocorrelation">Spatial Autocorrelation</a>
+      <a href="#method">IDW Method</a>
+      <a href="#comparison">Model Comparison</a>
+      <a href="#limitations">Limitations</a>
+    </nav>
+    <button class="theme-toggle" data-theme-toggle aria-label="Switch to dark mode">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+    </button>
+  </div>
+</header>
+
+<main id="main">
+
+  <!-- ============ HERO ============ -->
+  <section class="hero" id="top">
+    <div class="container">
+      <div class="hero__eyebrow">Bicycle Theft Spatial Risk Prediction</div>
+      <h1>Supplementary Materials</h1>
+      <p>
+        The 4-page presentation deck covers the core finding: IDW (θ=3) predicts bicycle theft risk
+        as reliably as kriging, with far less complexity. This page holds the analysis detail that
+        didn't fit on the slides — full-decade trends, the spatial autocorrelation evidence behind
+        Moran's I, the IDW method walkthrough, and the complete 9-model comparison table.
+      </p>
+      <div class="hero__meta">
+        <span class="pill"><strong>31,833</strong> incidents</span>
+        <span class="pill"><strong>140</strong> neighborhoods</span>
+        <span class="pill"><strong>2014–2023</strong> span</span>
+        <span class="pill">Toronto, Canada</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 1. TEMPORAL TRENDS ============ -->
+  <section id="trends">
+    <div class="container">
+      <div class="section-label"><span class="num">1</span> Temporal Trends</div>
+      <h2 class="section-title">A decade of theft reports, and why Q3–Q4 dominate</h2>
+      <p class="section-intro">
+        The deck's seasonal chart shows Q3 and Q4 together account for 75% of all incidents. Here's the
+        full decade underneath that number — year-by-year totals, and the quarterly pattern repeating
+        across all ten years.
+      </p>
+
+      <div class="grid-2">
+        <div class="chart-card reveal">
+          <div class="chart-card__title">Annual incident counts</div>
+          <div class="chart-card__subtitle">2014–2023, by report date</div>
+          <div class="chart-canvas-wrap">
+            <canvas id="chartYearly" role="img" aria-label="Bar chart of bicycle theft incidents per year from 2014 to 2023"></canvas>
+          </div>
+        </div>
+        <div class="chart-card reveal">
+          <div class="chart-card__title">Quarterly composition, per year</div>
+          <div class="chart-card__subtitle">Same four-quarter pattern repeats every year</div>
+          <div class="chart-canvas-wrap">
+            <canvas id="chartYearQuarter" role="img" aria-label="Stacked bar chart of bicycle theft incidents by quarter for each year from 2014 to 2023"></canvas>
+          </div>
+        </div>
+      </div>
+
+      <div class="callout reveal" style="margin-top: var(--space-8);">
+        <p>
+          <strong>Reading the pattern:</strong> incident counts hover between 2,600–3,700 per year with no
+          strong long-term trend, but every single year shows the same shape — a slow Q1 (cold, low cycling
+          volume), a ramp through Q2, a Q3 peak, and a still-elevated Q4. This is consistent with bicycle theft
+          tracking bicycle <em>usage</em>: more bikes parked outside in warm months means more targets. The dip in
+          2021–2023 loosely coincides with reduced downtown commuter traffic during and after pandemic-era
+          office closures, though this dataset alone cannot confirm causation.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 2. SPATIAL AUTOCORRELATION ============ -->
+  <section id="autocorrelation">
+    <div class="container">
+      <div class="section-label"><span class="num">2</span> Spatial Autocorrelation</div>
+      <h2 class="section-title">Moran's I = 0.288 — what the number actually means</h2>
+      <p class="section-intro">
+        The deck states theft risk is "spatially structured, not random" and cites Moran's I = 0.288
+        (p &lt; 0.001). This scatter plot is the visual evidence behind that number.
+      </p>
+
+      <div class="grid-2">
+        <div class="chart-card reveal">
+          <div class="chart-card__title">Moran scatter plot</div>
+          <div class="chart-card__subtitle">Each point is one of 140 neighborhoods</div>
+          <div class="chart-canvas-wrap">
+            <canvas id="chartMoran" role="img" aria-label="Scatter plot of standardized theft counts versus their spatial lag across 140 Toronto neighborhoods, showing positive spatial autocorrelation"></canvas>
+          </div>
+          <div class="quadrant-legend">
+            <div class="quadrant-item"><span class="quadrant-swatch" style="background:var(--color-chart-1)"></span>High–High: hotspot clusters (27 neighborhoods)</div>
+            <div class="quadrant-item"><span class="quadrant-swatch" style="background:var(--color-chart-3)"></span>Low–Low: coldspot clusters (90 neighborhoods)</div>
+            <div class="quadrant-item"><span class="quadrant-swatch" style="background:var(--color-chart-6)"></span>High–Low: local outliers (5 neighborhoods)</div>
+            <div class="quadrant-item"><span class="quadrant-swatch" style="background:var(--color-chart-5)"></span>Low–High: local outliers (18 neighborhoods)</div>
+          </div>
+        </div>
+
+        <div class="card reveal">
+          <h3 style="font-size: var(--text-lg); font-weight: 600; margin-bottom: var(--space-4);">How to read this chart</h3>
+          <p style="font-size: var(--text-sm); color: var(--color-text-muted); margin-bottom: var(--space-4);">
+            The x-axis is each neighborhood's theft count, standardized (mean-centered, scaled by standard
+            deviation). The y-axis is the <strong>spatial lag</strong> — the average standardized count of its
+            neighbors within a 5.6&nbsp;km radius. If theft risk were randomly scattered across the city, points
+            would form a flat, structureless cloud. Instead they trend upward: neighborhoods with high theft
+            counts tend to sit next to other high-count neighborhoods, and low sits next to low.
+          </p>
+          <p style="font-size: var(--text-sm); color: var(--color-text-muted); margin-bottom: var(--space-4);">
+            The slope of that trend <em>is</em> Moran's I. A value of <strong>0.288</strong> (compared to an
+            expected value near 0 under randomness) with <strong>p &lt; 0.001</strong> from a 999-permutation test
+            means this clustering is statistically significant — it is very unlikely to have arisen by chance.
+          </p>
+          <p style="font-size: var(--text-sm); color: var(--color-text-muted);">
+            This is the formal justification for the whole project: if risk were spatially random, no
+            interpolation method (kriging, IDW, or otherwise) could out-predict a simple citywide average.
+            The clustering is what makes spatial prediction possible at all.
+          </p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 3. IDW METHOD ============ -->
+  <section id="method">
+    <div class="container">
+      <div class="section-label"><span class="num">3</span> Method Detail</div>
+      <h2 class="section-title">Inverse Distance Weighting, from formula to cross-validation</h2>
+      <p class="section-intro">
+        The deck names the IDW formula in passing. Here it is broken down term by term, alongside the
+        leave-one-out cross-validation (LOOCV) procedure used to pick θ and to score every model in the
+        comparison table below.
+      </p>
+
+      <div class="formula-block reveal" aria-label="IDW prediction formula: Z hat of x zero equals the sum of w sub i times Z of x sub i, divided by the sum of w sub i; where w sub i equals 1 over d sub i to the power theta">
+        <div class="formula-row">
+          <span class="formula-var">Ẑ(x<sub>0</sub>)</span>
+          <span class="formula-eq">=</span>
+          <span class="formula-frac">
+            <span class="formula-frac__top">Σ<sub>i=1</sub><sup>n</sup> w<sub>i</sub> Z(x<sub>i</sub>)</span>
+            <span class="formula-frac__bar"></span>
+            <span class="formula-frac__bottom">Σ<sub>i=1</sub><sup>n</sup> w<sub>i</sub></span>
+          </span>
+          <span class="formula-comma">,</span>
+          <span class="formula-eq formula-eq--gap">w<sub>i</sub> =</span>
+          <span class="formula-frac">
+            <span class="formula-frac__top">1</span>
+            <span class="formula-frac__bar"></span>
+            <span class="formula-frac__bottom">d<sub>i</sub><sup>θ</sup></span>
+          </span>
+        </div>
+      </div>
+
+      <div class="legend-list reveal">
+        <div class="legend-item"><span class="sym">Ẑ(x₀)</span><span class="desc">Predicted log-theft-count at an unobserved location x₀.</span></div>
+        <div class="legend-item"><span class="sym">Z(xᵢ)</span><span class="desc">Observed log-theft-count at known neighborhood centroid i.</span></div>
+        <div class="legend-item"><span class="sym">dᵢ</span><span class="desc">Euclidean distance (km, UTM projection) from x₀ to centroid i.</span></div>
+        <div class="legend-item"><span class="sym">θ</span><span class="desc">Power parameter — how sharply influence decays with distance. Higher θ = more local, lower θ = smoother.</span></div>
+        <div class="legend-item"><span class="sym">wᵢ</span><span class="desc">Weight assigned to neighbor i, inversely proportional to distance raised to θ.</span></div>
+        <div class="legend-item"><span class="sym">n</span><span class="desc">All other centroids used as neighbors — IDW is a global method, not k-nearest.</span></div>
+      </div>
+
+      <h3 style="font-size: var(--text-lg); font-weight: 600; margin-top: var(--space-12); margin-bottom: var(--space-2);">
+        How θ and every model in the table were scored: LOOCV
+      </h3>
+      <p style="font-size: var(--text-sm); color: var(--color-text-muted); max-width: 68ch; margin-bottom: var(--space-2);">
+        Leave-one-out cross-validation removes one of the 140 neighborhoods, predicts its value from the
+        other 139, and records the error. Repeating this for every neighborhood — once per model, once per
+        candidate θ — gives an honest estimate of predictive accuracy without a separate holdout set, which
+        this dataset is too small to afford.
+      </p>
+
+      <div class="flow-steps reveal">
+        <div class="flow-step">
+          <div class="flow-step__num">1</div>
+          <h4>Hold out one point</h4>
+          <p>Remove neighborhood i from the 140 centroids.</p>
+        </div>
+        <div class="flow-step">
+          <div class="flow-step__num">2</div>
+          <h4>Fit on the rest</h4>
+          <p>Compute weights (IDW) or a variogram (kriging) using the remaining 139.</p>
+        </div>
+        <div class="flow-step">
+          <div class="flow-step__num">3</div>
+          <h4>Predict the held-out point</h4>
+          <p>Estimate log(theft_count+1) at neighborhood i's location.</p>
+        </div>
+        <div class="flow-step">
+          <div class="flow-step__num">4</div>
+          <h4>Repeat ×140, score</h4>
+          <p>Average the squared and absolute errors into RMSE and MAE.</p>
+        </div>
+      </div>
+
+      <div class="chart-card reveal" style="margin-top: var(--space-10);">
+        <div class="chart-card__title">LOOCV RMSE across θ = 1–5</div>
+        <div class="chart-card__subtitle">Optimum at θ = 3; error stays within ±4% across θ = 2–5</div>
+        <div class="chart-canvas-wrap short">
+          <canvas id="chartTheta" role="img" aria-label="Line chart of LOOCV RMSE against IDW power parameter theta, showing a minimum at theta equals 3"></canvas>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 4. FULL MODEL COMPARISON ============ -->
+  <section id="comparison">
+    <div class="container">
+      <div class="section-label"><span class="num">4</span> Full Model Comparison</div>
+      <h2 class="section-title">All 9 candidate models, RMSE and MAE</h2>
+      <p class="section-intro">
+        The deck's ranking chart shows RMSE only. The table below adds MAE (mean absolute error, less
+        sensitive to outlier neighborhoods than RMSE) and groups models by family. Both metrics agree on
+        the ranking: Kriging (Spherical) and IDW (θ=3) are effectively tied at the top.
+      </p>
+
+      <div class="table-wrap reveal">
+        <table class="data-table" id="modelTable">
+          <thead>
+            <tr>
+              <th>Rank</th>
+              <th>Model</th>
+              <th>Family</th>
+              <th>LOOCV RMSE</th>
+              <th>LOOCV MAE</th>
+            </tr>
+          </thead>
+          <tbody><!-- injected --></tbody>
+        </table>
+      </div>
+
+      <div class="callout reveal" style="margin-top: var(--space-8);">
+        <p>
+          <strong>Why IDW (θ=3), not Kriging (Spherical), was chosen for the deck:</strong> the RMSE gap
+          between them (0.685 vs. 0.690) is under 1% — not a meaningful difference given only 140 fitting
+          points. IDW needs no variogram to fit on data with repeated coordinates (multiple incidents share
+          a neighborhood centroid), has one parameter instead of three (nugget, sill, range), and both
+          metrics — RMSE and MAE — agree on the same near-tie. Kriging (Gaussian) is included here for
+          completeness; it is numerically the least stable of the three variogram families on this dataset
+          and is the one most likely to fail to converge depending on the fitting starting values, which is
+          why it was left out of the deck's headline chart.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 5. LIMITATIONS ============ -->
+  <section id="limitations">
+    <div class="container">
+      <div class="section-label"><span class="num">5</span> Limitations</div>
+      <h2 class="section-title">Where the uncertainty estimate is a proxy, not a guarantee</h2>
+      <p class="section-intro">
+        The deck's uncertainty map is real and useful, but the method behind it has real limitations worth
+        stating plainly.
+      </p>
+
+      <div class="limitations-list reveal">
+        <div class="limitation-item">
+          <div class="limitation-item__icon" aria-hidden="true">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></svg>
+          </div>
+          <div>
+            <h4>IDW has no native variance estimator</h4>
+            <p>Unlike kriging, which derives prediction variance directly from the fitted variogram, IDW is a
+            deterministic weighted average with no built-in notion of confidence. Any "uncertainty" shown for
+            an IDW surface has to be approximated from somewhere else.</p>
+          </div>
+        </div>
+        <div class="limitation-item">
+          <div class="limitation-item__icon" aria-hidden="true">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></svg>
+          </div>
+          <div>
+            <h4>The approximation used: interpolated LOOCV squared error</h4>
+            <p>The deck's uncertainty map interpolates the squared LOOCV errors observed at the 140 training
+            centroids across the same grid used for the risk surface. This is a reasonable proxy — it's
+            genuinely low where the model was accurate nearby and high where it wasn't — but it is a
+            <em>backward-looking</em> measure of past cross-validation error, not a forward-looking predictive
+            interval with a formal coverage guarantee (e.g. "90% of true values fall in this band").</p>
+          </div>
+        </div>
+        <div class="limitation-item">
+          <div class="limitation-item__icon" aria-hidden="true">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></svg>
+          </div>
+          <div>
+            <h4>It inherits the sparsity of the training data</h4>
+            <p>At the data-sparse municipal boundary, LOOCV errors are themselves estimated from fewer nearby
+            points, so the "high uncertainty" reading there is partly a statement about data scarcity, not
+            just model disagreement.</p>
+          </div>
+        </div>
+        <div class="limitation-item">
+          <div class="limitation-item__icon" aria-hidden="true">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></svg>
+          </div>
+          <div>
+            <h4>Better alternatives exist, at a cost</h4>
+            <p>Bootstrap resampling of the 140 centroids, or conditional simulation (standard in geostatistics
+            for kriging), would produce calibrated predictive intervals. Both were out of scope here given the
+            small sample size (140 points) and project timeline, but are the natural next step for anyone
+            extending this analysis.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<footer class="site-footer">
+  <div class="container">
+    <div class="footer-links">
+      <a href="https://weijingnan301-ship-it.github.io/STAT3888-my-project/" target="_blank" rel="noopener noreferrer">Interactive Heatmap</a>
+      <a href="https://weijingnan301-ship-it.github.io/STAT3888-my-project/bike_theft_model_comparison_dashboard.html" target="_blank" rel="noopener noreferrer">LOOCV Dashboard</a>
+      <a href="https://weijingnan301-ship-it.github.io/STAT3888-my-project/bicycle_theft_pdf_charts.nb.html" target="_blank" rel="noopener noreferrer">Full Code</a>
+      <a href="https://github.com/weijingnan301-ship-it/STAT3888-my-project/releases/download/v1.0.0/bicycle.csv.zip" target="_blank" rel="noopener noreferrer">Data</a>
+      <a href="https://weijingnan301-ship-it.github.io/STAT3888-my-project/Toronto_Bicycle_Theft_Spatial_Analysis_Report.pdf" target="_blank" rel="noopener noreferrer">Full Report</a>
+    </div>
+    <p class="footer-meta">
+      Bicycle Theft Spatial Risk Prediction — Supplementary Materials. Data: Toronto Police Service bicycle
+      theft records, 2014–2023, via the project's <a href="https://github.com/weijingnan301-ship-it/STAT3888-my-project" target="_blank" rel="noopener noreferrer">GitHub repository</a>.
+    </p>
+  </div>
+</footer>
+
+<script src="./app.js"></script>
+<script data-pplx-inline-edit>
+(function () {
+  if (window === window.top) return;
+
+  const allowedParentOrigins = ["https://www.perplexity.ai","https://perplexity.ai","https://testing.perplexity.ai","https://staging.perplexity.ai","https://*.preview.i.perplexity.ai","http://perplexity.localhost","http://localhost:1420","http://127.0.0.1:1420","http://localhost:3000","http://127.0.0.1:3000","http://localhost:5173","http://127.0.0.1:5173"];
+  const MAX_FONT_BYTES = 500 * 1024;
+  const MAX_TOTAL_FONT_BYTES = 2 * 1024 * 1024;
+  let scrollForwarding = false;
+  let scrollRaf = 0;
+  let trustedTopOrigin = null;
+
+  // Allow entries like "https://*.preview.i.perplexity.ai" — the wildcard
+  // matches a single DNS label (no dots), so "https://*.foo" cannot stretch
+  // across multiple labels.
+  function matchesAllowedOrigin(origin) {
+    if (!origin) return false;
+    for (const entry of allowedParentOrigins) {
+      if (!entry.includes("*")) {
+        if (entry === origin) return true;
+        continue;
+      }
+      const pattern = new RegExp(
+        "^" +
+          entry.replace(/[.+?^${}()|[\]\\]/g, "\\$&").replace(/\*/g, "[^.]+") +
+          "$",
+      );
+      if (pattern.test(origin)) return true;
+    }
+    return false;
+  }
+
+  // Trust decision: when the sender is same-origin-visible (event.origin is a
+  // real origin like https://www.perplexity.ai) we trust event.origin directly.
+  // When event.origin is "null" (opaque broker srcdoc), we fall back to the
+  // broker's stamped `parentOrigin` to identify the top window. The fallback
+  // is claim-only — we rely on the browser's native `targetOrigin` enforcement
+  // on the response path (see postToTrustedTop) to ensure replies can't be
+  // delivered to anyone but the actual top window of that claimed origin.
+  function getTrustedParentOrigin(event) {
+    const forwardedParentOrigin =
+      typeof event.data.parentOrigin === "string" ? event.data.parentOrigin : null;
+    const parentOrigin = event.origin === "null" ? forwardedParentOrigin : event.origin;
+    return matchesAllowedOrigin(parentOrigin) ? parentOrigin : null;
+  }
+
+  // All responses go to window.top with targetOrigin = the allowlisted origin.
+  // An attacker that iframes us inside their own null-origin broker can claim
+  // any parentOrigin they like, but the browser will drop the reply whenever
+  // the real top's origin doesn't match — so the screenshot never leaves.
+  function postToTrustedTop(message) {
+    if (!trustedTopOrigin) return;
+    try {
+      window.top.postMessage(message, trustedTopOrigin);
+    } catch (_error) {}
+  }
+
+  function inlineAll(original, clone) {
+    if (original.nodeType !== 1 || clone.nodeType !== 1) return;
+
+    try {
+      const computedStyle = getComputedStyle(original);
+      // cssText on a computed style is the serialized declaration in modern
+      // Chromium/Safari — a single read beats enumerating ~400 longhand
+      // properties. Firefox returns "" here, so we fall back on empty.
+      const serialized = computedStyle.cssText;
+      if (serialized) {
+        clone.style.cssText = serialized;
+      } else {
+        const parts = new Array(computedStyle.length);
+        for (let index = 0; index < computedStyle.length; index += 1) {
+          const property = computedStyle[index];
+          parts[index] = `${property}:${computedStyle.getPropertyValue(property)};`;
+        }
+        clone.style.cssText = parts.join("");
+      }
+    } catch (_error) {}
+
+    const originalChildren = original.children;
+    const clonedChildren = clone.children;
+    for (
+      let index = 0;
+      index < originalChildren.length && index < clonedChildren.length;
+      index += 1
+    ) {
+      inlineAll(originalChildren[index], clonedChildren[index]);
+    }
+  }
+
+  function extractFontUrl(srcValue) {
+    const matches = [
+      ...srcValue.matchAll(
+        /url\(["']?([^"')]+)["']?\)(?:\s*format\(["']?([^"')]+)["']?\))?/gi,
+      ),
+    ];
+    if (matches.length === 0) return null;
+    const woff2 = matches.find((m) => m[2] && m[2].toLowerCase().includes("woff2"));
+    if (woff2) return woff2[1];
+    const woff = matches.find((m) => m[2] && m[2].toLowerCase().includes("woff"));
+    if (woff) return woff[1];
+    return matches[0][1];
+  }
+
+  // Cache resolved font URL -> data URI across captures. Fonts on a page
+  // essentially never change, and a batch run emits multiple captures back to
+  // back — without this we'd refetch + re-base64 every time.
+  const fontDataUriCache = new Map();
+  const SRC_DECLARATION_RE = /src\s*:\s*[^;}]+/i;
+
+  async function fetchAsDataUri(url) {
+    if (fontDataUriCache.has(url)) return fontDataUriCache.get(url);
+    let dataUri = null;
+    try {
+      const response = await fetch(url, { mode: "cors", credentials: "omit" });
+      if (response.ok) {
+        const blob = await response.blob();
+        if (blob.size <= MAX_FONT_BYTES) {
+          dataUri = await new Promise((resolve) => {
+            const reader = new FileReader();
+            reader.onloadend = () =>
+              resolve(typeof reader.result === "string" ? reader.result : null);
+            reader.onerror = () => resolve(null);
+            reader.readAsDataURL(blob);
+          });
+        }
+      }
+    } catch (_error) {
+      dataUri = null;
+    }
+    fontDataUriCache.set(url, dataUri);
+    return dataUri;
+  }
+
+  function collectFontFaceRuleTexts() {
+    const rules = [];
+    for (const sheet of document.styleSheets) {
+      let cssRules;
+      try {
+        cssRules = sheet.cssRules;
+      } catch (_error) {
+        continue;
+      }
+      if (!cssRules) continue;
+      for (const rule of cssRules) {
+        const cssText = rule.cssText || "";
+        if (cssText.startsWith("@font-face")) rules.push(cssText);
+      }
+    }
+    return rules;
+  }
+
+  async function buildInlinedFontCss() {
+    const ruleTexts = collectFontFaceRuleTexts();
+    if (ruleTexts.length === 0) return null;
+
+    const resolved = ruleTexts.map((cssText) => {
+      if (!SRC_DECLARATION_RE.test(cssText)) return null;
+      const srcMatch = cssText.match(/src\s*:\s*([^;}]+)[;}]/i);
+      if (!srcMatch) return null;
+      const url = extractFontUrl(srcMatch[1]);
+      if (!url) return null;
+      try {
+        return { cssText, url: new URL(url, document.baseURI).href };
+      } catch (_error) {
+        return null;
+      }
+    });
+
+    const dataUris = await Promise.all(
+      resolved.map((entry) => (entry ? fetchAsDataUri(entry.url) : Promise.resolve(null))),
+    );
+
+    const inlined = [];
+    let totalBytes = 0;
+    for (let index = 0; index < resolved.length; index += 1) {
+      const entry = resolved[index];
+      const dataUri = dataUris[index];
+      if (!entry || !dataUri) continue;
+      const approxBytes = dataUri.length * 0.75;
+      if (totalBytes + approxBytes > MAX_TOTAL_FONT_BYTES) break;
+      totalBytes += approxBytes;
+      inlined.push(entry.cssText.replace(SRC_DECLARATION_RE, `src: url("${dataUri}")`));
+    }
+    return inlined.length > 0 ? inlined.join("\n") : null;
+  }
+
+  function stripExternal(clone) {
+    const images = clone.querySelectorAll("img");
+    for (let index = 0; index < images.length; index += 1) {
+      const src = images[index].getAttribute("src");
+      if (src && !src.startsWith("data:")) images[index].removeAttribute("src");
+    }
+
+    const elements = clone.querySelectorAll("*");
+    for (let index = 0; index < elements.length; index += 1) {
+      const style = elements[index].style.cssText;
+      if (style && style.includes("url(")) {
+        elements[index].style.cssText = style.replace(
+          /url\(["']?(?!data:)[^)"']*["']?\)/gi,
+          "none",
+        );
+      }
+    }
+  }
+
+  function emitScroll() {
+    scrollRaf = 0;
+    if (!scrollForwarding) return;
+    postToTrustedTop({
+      type: "INLINE_EDIT_SCROLL",
+      scrollX: window.scrollX,
+      scrollY: window.scrollY,
+    });
+  }
+
+  window.addEventListener(
+    "scroll",
+    function () {
+      if (!scrollForwarding || scrollRaf) return;
+      scrollRaf = requestAnimationFrame(emitScroll);
+    },
+    { passive: true, capture: true },
+  );
+
+  async function handleCaptureRequest(event) {
+    const requestId = event.data.requestId;
+    const scrollX = window.scrollX;
+    const scrollY = window.scrollY;
+    const width = window.innerWidth;
+    const height = window.innerHeight;
+
+    function postResult(dataUrl) {
+      postToTrustedTop({
+        type: "INLINE_EDIT_SCREENSHOT_RESULT",
+        requestId,
+        dataUrl,
+        scrollX,
+        scrollY,
+      });
+    }
+
+    try {
+      // Wait for any pending web fonts to resolve so both inline metrics and
+      // the @font-face inlining below see the same loaded faces.
+      if (document.fonts && document.fonts.ready) {
+        try {
+          await document.fonts.ready;
+        } catch (_error) {}
+      }
+
+      const clone = document.documentElement.cloneNode(true);
+      inlineAll(document.documentElement, clone);
+
+      const removedNodes = clone.querySelectorAll("script,link[rel=\"stylesheet\"],style");
+      for (let index = 0; index < removedNodes.length; index += 1) {
+        removedNodes[index].remove();
+      }
+
+      stripExternal(clone);
+
+      // Re-embed web fonts as data-URI @font-face rules so the SVG rasterizer
+      // can resolve them — external font URLs aren't fetched during
+      // foreignObject rendering, which would otherwise force a fallback face
+      // and change text metrics.
+      const inlinedFontCss = await buildInlinedFontCss();
+      if (inlinedFontCss) {
+        const styleEl = document.createElement("style");
+        styleEl.textContent = inlinedFontCss;
+        const head = clone.querySelector("head");
+        if (head) head.appendChild(styleEl);
+        else clone.insertBefore(styleEl, clone.firstChild);
+      }
+
+      const html = new XMLSerializer().serializeToString(clone);
+      const svg =
+        `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}">` +
+        '<foreignObject width="100%" height="100%">' +
+        `<div xmlns="http://www.w3.org/1999/xhtml" style="width:${width}px;height:${height}px;overflow:hidden">` +
+        `<div style="position:relative;left:-${scrollX}px;top:-${scrollY}px">` +
+        html +
+        "</div></div></foreignObject></svg>";
+      const svgUrl = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+      const image = new Image();
+      image.onload = function () {
+        const canvas = document.createElement("canvas");
+        canvas.width = width;
+        canvas.height = height;
+        canvas.getContext("2d").drawImage(image, 0, 0);
+        postResult(canvas.toDataURL("image/png"));
+      };
+      image.onerror = function () {
+        postResult(null);
+      };
+      image.src = svgUrl;
+    } catch (_error) {
+      postResult(null);
+    }
+  }
+
+  window.addEventListener("message", function (event) {
+    if (!event.data) return;
+    // Only accept messages from the direct parent frame. Blocks sibling /
+    // unrelated-window postMessage senders that could otherwise reach us.
+    if (event.source !== window.parent) return;
+
+    const trustedParentOrigin = getTrustedParentOrigin(event);
+    if (!trustedParentOrigin) return;
+    trustedTopOrigin = trustedParentOrigin;
+
+    if (event.data.type === "INLINE_EDIT_SCROLL_START") {
+      scrollForwarding = true;
+      emitScroll();
+      return;
+    }
+
+    if (event.data.type === "INLINE_EDIT_SCROLL_STOP") {
+      scrollForwarding = false;
+      if (scrollRaf) cancelAnimationFrame(scrollRaf);
+      scrollRaf = 0;
+      return;
+    }
+
+    if (event.data.type !== "INLINE_EDIT_CAPTURE_REQUEST") return;
+
+    handleCaptureRequest(event);
+  });
+})();
+
+
+</script></body>
+</html>
