@@ -266,14 +266,13 @@
 
       <div class="callout reveal" style="margin-top: var(--space-8);">
         <p>
-          <strong>Why IDW (θ=3), not Kriging (Spherical), was chosen for the deck:</strong> the RMSE gap
-          between them (0.685 vs. 0.690) is under 1% — not a meaningful difference given only 140 fitting
-          points. IDW needs no variogram to fit on data with repeated coordinates (multiple incidents share
-          a neighborhood centroid), has one parameter instead of three (nugget, sill, range), and both
-          metrics — RMSE and MAE — agree on the same near-tie. Kriging (Gaussian) is included here for
-          completeness; it is numerically the least stable of the three variogram families on this dataset
-          and is the one most likely to fail to converge depending on the fitting starting values, which is
-          why it was left out of the deck's headline chart.
+          <strong>Why IDW (θ=3), not Kriging (Spherical), was chosen for the deck:</strong> under strict
+          LOOCV, with kriging variograms refit inside each held-out fold, the RMSE gap between them
+          (0.688 vs. 0.690) is under 1% — not a meaningful difference given only 140 fitting points.
+          IDW has one transparent tuning parameter instead of three variogram parameters (nugget, sill,
+          range), and both metrics — RMSE and MAE — support the same near-tie. The deck therefore selects
+          IDW for interpretability and stability, while retaining kriging as the closest geostatistical
+          benchmark.
         </p>
       </div>
     </div>

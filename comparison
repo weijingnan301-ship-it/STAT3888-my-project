@@ -136,7 +136,7 @@
             <td><strong>Prediction Output</strong></td>
             <td>Smoothed risk surface</td>
             <td>Smoothed risk surface + prediction variance</td>
-            <td>IDW performs better in LOOCV</td>
+            <td>Strict LOOCV shows IDW and spherical kriging are effectively tied</td>
         </tr>
         <tr>
             <td><strong>Uncertainty Representation</strong></td>
@@ -172,10 +172,11 @@
 </table>
 
 <div class="conclusion">
-    <strong>✅ Conclusion:</strong> After all models were trained on the same target (<code>log(theft_count + 1)</code>),
-    <strong>IDW (θ=3) achieved the lowest LOOCV RMSE (0.6898)</strong> among all compared models.<br>
-    With fewer assumptions, transparent parameter tuning, and suitability for small‑sample data (140 centroids),
-    <strong>IDW is selected as the primary model</strong>; Kriging serves as an advanced benchmark that provides complementary uncertainty estimates.
+    <strong>✅ Conclusion:</strong> After all models were scored on the same target (<code>log(theft_count + 1)</code>)
+    using strict LOOCV, with kriging variograms refit inside each held-out fold,
+    <strong>Kriging (Spherical, RMSE 0.6875) and IDW (θ=3, RMSE 0.6898) are effectively tied</strong>.<br>
+    With fewer assumptions, transparent parameter tuning, and stable behavior for 140 centroid observations,
+    <strong>IDW is selected as the primary model</strong>; Kriging remains the closest geostatistical benchmark and provides complementary uncertainty estimates.
 </div>
 
 <div class="footer">
